@@ -40,6 +40,10 @@ void RNSkModuleManager::installBindings(jsi::Runtime* jsRuntime, std::shared_ptr
               jsi::Value animString = jsi::String::createFromUtf8(rt, result);
               std::vector<jsi::Value> arguments;
               arguments.emplace_back(std::move(animString));
+              if (count == 2 && args[1].isObject()) {
+                auto resourcesProver = args[1].asObject(rt);
+                arguments.emplace_back(std::move(resourcesProver));
+              }
               return createSkottie(rt, thisValue, arguments.data(), arguments.size());
             } catch (const std::exception& e) {
               jsi::detail::throwOrDie<jsi::JSError>(rt, e.what());

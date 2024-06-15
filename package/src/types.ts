@@ -2,6 +2,10 @@ import type {
   SkCanvas,
   SkJSIInstance,
   SkRect,
+  SkImage,
+  SkMatrix,
+  FilterMode,
+  MipmapMode,
 } from '@shopify/react-native-skia';
 
 /**
@@ -19,6 +23,36 @@ export interface AnimationObject {
   assets: any[];
   layers: any[];
   markers?: any[];
+}
+
+export const enum SizeFit {
+  Fill,
+  Start,
+  Center,
+  End,
+  // No scaling.
+  None,
+}
+
+export interface FrameData {
+  image: SkImage;
+  filterMode: FilterMode;
+  mipMapMode: MipmapMode;
+  matrix: SkMatrix;
+  sizeFit: SizeFit;
+}
+
+export interface ImageAsset {
+  isMultiFrame(): boolean;
+  getFrameData(time: number): FrameData;
+}
+
+export interface ResourceProvider {
+  loadImageAsset(
+    resourcePath: string,
+    resourceName: string,
+    resourceId: string
+  ): ImageAsset | null;
 }
 
 export interface SkSkottie extends SkJSIInstance<'Skottie'> {

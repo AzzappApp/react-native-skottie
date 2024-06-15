@@ -11,9 +11,22 @@ import {
 import {
   Skottie,
   AnimationObject,
-  type SkottieViewRef,
   SkottieAPI,
+  SizeFit,
+  type SkSkottie,
+  type SkottieViewRef,
+  type ImageAsset,
+  type ResourceProvider,
 } from 'react-native-skottie';
+import {
+  Skia,
+  FilterMode,
+  MipmapMode,
+  drawAsImageFromPicture,
+  createPicture,
+  Canvas,
+  Picture,
+} from '@shopify/react-native-skia';
 import * as Animations from './animations';
 import LottieView from 'lottie-react-native';
 import DotLottieAnimation from './animations/Hands.lottie';
@@ -21,14 +34,18 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Easing,
   useSharedValue,
+  useDerivedValue,
   withRepeat,
   withTiming,
+  runOnUI,
 } from 'react-native-reanimated';
 
 const animations = {
   ...Animations,
   DotLottieAnimation,
 };
+
+const ExternalResources = require('./animations/ExternalResources.json');
 
 function SkottieAnimation({ source }: { source: AnimationObject }) {
   const [loop, setIsLoop] = useState(true);
@@ -219,6 +236,101 @@ function SkottieProgressAPI({ source }: { source: AnimationObject }) {
   );
 }
 
+function SkottieExternalResource() {
+  const animationSharedValue = useSharedValue<SkSkottie | null>(null);
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    runOnUI(() => {
+      'worklet';
+      const imageAssets: Record<string, ImageAsset> = {};
+      let duration = 0;
+      const innerAnimations = Object.values(Animations).map((animation) =>
+        SkottieAPI.createFrom(animation)
+      );
+      let currentAnimation = 0;
+      const resourceProvider: ResourceProvider = {
+        loadImageAsset: (_resourcePath, _resourceName, resourceId) => {
+          let imageAsset = imageAssets[resourceId];
+          if (imageAsset == null) {
+            const innerAnimation =
+              innerAnimations[currentAnimation++ % innerAnimations.length]!;
+            imageAsset = {
+              isMultiFrame() {
+                return true;
+              },
+              getFrameData(time) {
+                const progress = time / duration;
+                innerAnimation.seek(progress);
+                return {
+                  image: drawAsImageFromPicture(
+                    createPicture((canvas) => {
+                      innerAnimation.seek(progress);
+                      innerAnimation.render(canvas, {
+                        x: 0,
+                        y: 0,
+                        width: 500,
+                        height: 500,
+                      });
+                    }),
+                    { width: 500, height: 500 }
+                  ),
+                  filterMode: FilterMode.Nearest,
+                  mipMapMode: MipmapMode.None,
+                  sizeFit: SizeFit.Center,
+                  matrix: Skia.Matrix(),
+                };
+              },
+            };
+            imageAssets[resourceId] = imageAsset;
+          }
+          return imageAsset;
+        },
+      };
+      const animation = SkottieAPI.createFrom(
+        ExternalResources,
+        resourceProvider
+      );
+      duration = animation.duration;
+      animationSharedValue.value = animation;
+
+      progress.value = withRepeat(
+        withTiming(1, {
+          duration: animation.duration * 1000,
+          easing: Easing.linear,
+        }),
+        -1
+      );
+    })();
+  }, [progress, animationSharedValue]);
+
+  const size = useSharedValue({ width: 0, height: 0 });
+
+  const picture = useDerivedValue(() => {
+    const animation = animationSharedValue.value;
+    return createPicture((canvas) => {
+      if (!animation) {
+        return;
+      }
+      animation.seek(progress.value);
+      animation.render(canvas, {
+        x: 0,
+        y: 0,
+        ...size.value,
+      });
+    });
+  });
+
+  return (
+    <View style={styles.flex1}>
+      <Text style={styles.heading}>Progress controlled example</Text>
+      <Canvas style={styles.flex1} onSize={size}>
+        <Picture picture={picture} />
+      </Canvas>
+    </View>
+  );
+}
+
 type ExampleType =
   | 'default'
   | 'imperative'
@@ -272,8 +384,12 @@ export default function App() {
   const [animation, setAnimation] = React.useState<
     AnimationObject | undefined
   >();
+  const [external, setExternal] = React.useState(false);
 
   const animationContent = useMemo(() => {
+    if (external) {
+      return <SkottieExternalResource />;
+    }
     if (animation == null) return null;
 
     if (type === 'skottie') {
@@ -302,11 +418,11 @@ export default function App() {
     }
 
     throw new Error('Invalid type');
-  }, [animation, exampleType, type]);
+  }, [animation, exampleType, type, external]);
 
   return (
     <SafeAreaView style={styles.flex1}>
-      {animation == null ? (
+      {animation == null && !external ? (
         <ScrollView style={styles.flex1}>
           <Text style={styles.heading}>Example type</Text>
           <ExampleTypeSwitches
@@ -327,6 +443,12 @@ export default function App() {
               />
             </View>
           ))}
+          <Button
+            title="External resources"
+            onPress={() => {
+              setExternal(true);
+            }}
+          />
           <Text style={styles.heading}>Lottie</Text>
           {Object.keys(animations).map((key) => (
             <View key={`lottie-${key}`}>
@@ -348,6 +470,7 @@ export default function App() {
             title="Back"
             onPress={() => {
               setAnimation(undefined);
+              setExternal(false);
             }}
           />
         </View>

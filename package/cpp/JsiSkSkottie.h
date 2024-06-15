@@ -2,6 +2,7 @@
 
 #include <jsi/jsi.h>
 
+#include "JsResourceProvider.h"
 #include "JsiSkCanvas.h"
 #include "JsiSkHostObjects.h"
 
@@ -76,7 +77,13 @@ public:
   static const jsi::HostFunctionType createCtor(std::shared_ptr<RNSkPlatformContext> context) {
     return JSI_HOST_FUNCTION_LAMBDA {
       auto jsonStr = arguments[0].asString(runtime).utf8(runtime);
-      auto animation = skottie::Animation::Builder().make(jsonStr.c_str(), jsonStr.size());
+
+      auto animationBuilder = skottie::Animation::Builder();
+      if (count > 1 && arguments[1].isObject()) {
+        auto jsResourceProvider = std::make_shared<jsi::Object>(arguments[1].asObject(runtime));
+        animationBuilder.setResourceProvider(JsResourceProvider::Make(std::move(jsResourceProvider), &runtime));
+      }
+      auto animation = animationBuilder.make(jsonStr.c_str(), jsonStr.size());
 
       // Return the newly constructed object
       return jsi::Object::createFromHostObject(runtime, std::make_shared<JsiSkSkottie>(std::move(context), std::move(animation)));

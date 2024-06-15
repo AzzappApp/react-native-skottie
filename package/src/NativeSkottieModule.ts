@@ -1,5 +1,5 @@
 import { Image, NativeModules, Platform } from 'react-native';
-import type { SkottieViewSource, SkSkottie } from './types';
+import type { SkottieViewSource, SkSkottie, ResourceProvider } from './types';
 
 const LINKING_ERROR =
   `The package 'react-native-skottie' doesn't seem to be linked. Make sure: \n\n` +
@@ -36,12 +36,25 @@ if (typeof SkiaSkottie.install === 'function') {
 }
 
 declare global {
-  var SkiaApi_SkottieCtor: (jsonString: string) => SkSkottie;
-  var SkiaApi_SkottieFromUri: (uri: string) => SkSkottie;
+  var SkiaApi_SkottieCtor: (
+    jsonString: string,
+    resourceProvider?: ResourceProvider | null
+  ) => SkSkottie;
+  var SkiaApi_SkottieFromUri: (
+    uri: string,
+    resourceProvider?: ResourceProvider | null
+  ) => SkSkottie;
 }
 
+const SkiaApi_SkottieCtor = global.SkiaApi_SkottieCtor;
+const SkiaApi_SkottieFromUri = global.SkiaApi_SkottieFromUri;
+
 export const SkottieAPI = {
-  createFrom: (source: SkottieViewSource): SkSkottie => {
+  createFrom: (
+    source: SkottieViewSource,
+    resourceProvider?: ResourceProvider | null
+  ): SkSkottie => {
+    'worklet';
     // Turn the source either into a JSON string, or a URI string:
     let _source: string | { sourceDotLottieURI: string };
 
@@ -63,9 +76,12 @@ export const SkottieAPI = {
 
     // Actually create the Skottie instance:
     if (typeof _source === 'string') {
-      return global.SkiaApi_SkottieCtor(_source);
+      return SkiaApi_SkottieCtor(_source, resourceProvider);
     } else {
-      return global.SkiaApi_SkottieFromUri(_source.sourceDotLottieURI);
+      return SkiaApi_SkottieFromUri(
+        _source.sourceDotLottieURI,
+        resourceProvider
+      );
     }
   },
 };
